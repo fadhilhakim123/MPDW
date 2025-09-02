@@ -1,0 +1,184 @@
+---
+title: "TugasPrak"
+author: "Muhammad Fadhil Hakim"
+date: "2025-08-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(forecast)
+library(TTR)
+library(TSA)
+library(graphics)
+```
+
+```{r}
+library(readxl)
+df <- read_excel("C:/prak/sem 5/MPDW/MPDW/Kurs Jual Rataan USD Fix.xlsx")
+df <- df[1:104,] #mengambil baris ke 1-104 dari data
+View(df)
+```
+
+```{r}
+df.ts <- ts(df$`Kurs Jual Rataan`) 
+df.ts
+```
+
+```{r}
+summary(df.ts)
+```
+
+```{r}
+#visualisasi data
+ts.plot(df.ts, xlab="Time Period ", ylab="Kurs Jual Rataam", 
+        main = "Time Series Plot")
+points(df.ts)
+```
+data terlihat membentuk pola tren
+
+```{r}
+# hitung jumlah data
+n <- nrow(df)
+
+# tentukan batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training_ma <- df[1:n_train, ]
+testing_ma  <- df[(n_train+1):n, ]
+
+# ubah ke time series
+train_ma.ts <- ts(training_ma$`Kurs Jual Rataan`)
+test_ma.ts  <- ts(testing_ma$`Kurs Jual Rataan`)
+```
+
+```{r}
+#eksplorasi keseluruhan data
+plot(df.ts, col="red",main="Plot semua data")
+points(df.ts)
+```
+```{r}
+#eksplorasi data latih
+plot(train_ma.ts, col="blue",main="Plot data latih")
+points(train_ma.ts)
+```
+
+```{r}
+#eksplorasi data uji
+plot(test_ma.ts, col="blue",main="Plot data uji")
+points(test_ma.ts)
+```
+```{r}
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = `Minggu Ke-`, y = `Kurs Jual Rataan`, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = `Minggu Ke-`, y = `Kurs Jual Rataan`, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "Kurs Jual Rataan", color = "Legend") +
+   scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+```{r}
+#melakukan smoothing data training dengan metode DMA
+data.sma<-SMA(train_ma.ts, n=4)
+
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:20.8
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(df.ts), 
+                   pemulusan1 = c(data.sma,rep(NA,20.8)),
+                   pemulusan2 = c(dma, rep(NA,20.8)),
+                   At = c(At, rep(NA,20.8)), 
+                   Bt = c(Bt,rep(NA,20.8)),
+                   ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+```{r}
+#visualisasi data aktual, data pemulusan, dan data peramalan
+ts.plot(train_ma.ts, xlab="Time Period ", ylab="Kurs Jual Rataan USD", main= "DMA N=4 Data Sales")
+points(train_ma.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+```
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error.dma = train_ma.ts-data.ramal2[1:length(train_ma.ts)]
+
+SSE.dma = sum(error.dma[8:length(train_ma.ts)]^2)
+MSE.dma = mean(error.dma[8:length(train_ma.ts)]^2)
+MAPE.dma = mean(abs((error.dma[8:length(train_ma.ts)]/train_ma.ts[8:length(train_ma.ts)])*100))
+
+akurasi.dma <- matrix(c(SSE.dma, MSE.dma, MAPE.dma))
+row.names(akurasi.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.dma) <- c("Akurasi m = 4")
+akurasi.dma
+```
+nilai MAPE 1.1% menunjukkan bahwa model DMA dengan n=4 sudah sangat baik dalam memprediksi data kurs jual rataan USD
+
+```{r}
+#melakukan smoothing data test dengan metode DMA
+data.sma<-SMA(test_ma.ts, n=4)
+
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:20.8
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(df.ts), 
+                   pemulusan1 = c(data.sma,rep(NA,20.8)),
+                   pemulusan2 = c(dma, rep(NA,20.8)),
+                   At = c(At, rep(NA,20.8)), 
+                   Bt = c(Bt,rep(NA,20.8)),
+                   ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+```{r}
+#visualisasi data aktual, data pemulusan, dan data peramalan
+ts.plot(test_ma.ts, xlab="Time Period ", ylab="Kurs Jual Rataan USD", main= "DMA N=4 Data Sales")
+points(test_ma.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+```
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error.dma = test_ma.ts-data.ramal2[1:length(test_ma.ts)]
+
+SSE.dma = sum(error.dma[8:length(test_ma.ts)]^2)
+MSE.dma = mean(error.dma[8:length(test_ma.ts)]^2)
+MAPE.dma = mean(abs((error.dma[8:length(test_ma.ts)]/test_ma.ts[8:length(test_ma.ts)])*100))
+
+akurasi.dma <- matrix(c(SSE.dma, MSE.dma, MAPE.dma))
+row.names(akurasi.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.dma) <- c("Akurasi m = 4")
+akurasi.dma
+```
+nilai MAPE 0.8% menunjukkan bahwa model DMA dengan n=4 sudah sangat baik dalam memprediksi data kurs jual rataan USD
