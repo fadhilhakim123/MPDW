@@ -1,0 +1,159 @@
+---
+title: "Untitled"
+author: "Muhammad Fadhil Hakim"
+date: "2025-09-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+library(PerformanceAnalytics)
+```
+
+```{r}
+df <- read.csv("C:/prak/sem 5/MPDW/MPDW/NewDelhi_Air_quality.csv")
+df
+```
+```{r}
+# Pilih kolom numerik
+df_num <- df[c("AQI", "CO", "no2", "o3", "pm10", "pm25", "so2")]
+
+# Matriks korelasi
+cor(df_num, use = "complete.obs")
+```
+Dipilih o3 sebagai variabel dependen karena memiliki korelasi paling tinggi dengan AQI yaitu 0.973.
+
+## Pembagian Data
+
+```{r}
+#SPLIT DATA
+train<-df_num[1:54,]
+test<-df_num[55:72,]
+test
+```
+
+```{r}
+#data time series
+train.ts<-ts(train)
+test.ts<-ts(test)
+data.ts<-ts(df_num)
+data.ts
+```
+## Model Koyck
+```{r}
+#MODEL KOYCK
+model.koyck <- koyckDlm(x = df_num$o3, y = df_num$AQI)
+summary(model.koyck)
+AIC(model.koyck)
+BIC(model.koyck)
+```
+```{r}
+fore.koyck <- forecast(model = model.koyck, x=test$o3, h=18)
+fore.koyck
+mape.koyck <- MAPE(fore.koyck$forecasts, test$AQI)
+mape.koyck #data test
+#akurasi data training
+GoF(model.koyck)
+```
+nilai MAPE model koyck adalah 1,6%
+
+## Model Regression with Distributed Lag
+```{r}
+#penentuan lag optimum 
+finiteDLMauto(formula = AQI ~ o3,
+              data = data.frame(train), q.min = 1, q.max = 10,
+              model.type = "dlm", error.type = "AIC", trace = TRUE)
+```
+dipilih nilai lag optimum adalah 10
+```{r}
+model.dlm <- dlm(x = train$o3,y = train$AQI , q = 10)
+summary(model.dlm)
+AIC(model.dlm)
+BIC(model.dlm)
+```
+didapat peubah lag 7,8,9, dan 10 signifikan
+
+```{r}
+fore.dlm <- forecast(model = model.dlm, x=test$o3, h=18)
+fore.dlm
+mape.dlm <- MAPE(fore.dlm$forecasts, test$AQI)
+mape.dlm
+#akurasi data training
+GoF(model.dlm)
+```
+nilai MAPE model dlm dengan lag=10 adalah 0,7%
+
+## Model ARDL
+```{r}
+model.ardl <- ardlDlm(x = train$o3, y = train$AQI, p = 1 , q = 1)
+summary(model.ardl)
+AIC(model.ardl)
+BIC(model.ardl)
+```
+```{r}
+model.ardl <- ardlDlm(formula = AQI ~ o3, 
+                         data = train,p = 1 , q = 1)
+summary(model.ardl)
+AIC(model.ardl)
+BIC(model.ardl)
+```
+
+
+```{r}
+fore.ardl <- forecast(model = model.ardl, x=test$o3, h=18)
+fore.ardl
+mape.ardl <- MAPE(fore.ardl$forecasts, test$AQI)
+mape.ardl
+#akurasi data training
+GoF(model.ardl)
+```
+nilai MAPE model ardl adalah 1,1%
+
+```{r}
+#penentuan lag optimum
+model.ardl.opt <- ardlBoundOrders(data = data.frame(df_num), ic = "AIC", 
+                                  formula = AQI ~ o3)
+model.ardl.opt
+min_p=c()
+for(i in 1:10){
+  min_p[i]=min(model.ardl.opt$Stat.table[[i]])
+}
+q_opt=which(min_p==min(min_p, na.rm = TRUE))
+p_opt=which(model.ardl.opt$Stat.table[[q_opt]] == 
+              min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+data.frame("q_optimum" = q_opt, "p_optimum" = p_opt, 
+           "AIC"=model.ardl.opt$min.Stat)
+```
+
+```{r}
+model.ardl2 <- ardlDlm(formula = AQI ~ o3, 
+                         data = train,p = 13 , q = 2)
+summary(model.ardl2)
+AIC(model.ardl2)
+BIC(model.ardl2)
+```
+```{r}
+fore.ardl2 <- forecast(model = model.ardl2, x=test$o3, h=18)
+fore.ardl2
+mape.ardl2 <- MAPE(fore.ardl2$forecasts, test$AQI)
+mape.ardl2
+#akurasi data training
+GoF(model.ardl2)
+```
+nilai MAPE model ardl dengan p=13 dan q=2 adalah 0,7%
+
+```{r}
+akurasi <- matrix(c(mape.koyck, mape.dlm, mape.ardl, mape.ardl2))
+row.names(akurasi)<- c("Koyck","DLM","ARDL","ARDL 2")
+colnames(akurasi) <- c("MAPE")
+akurasi
+```
+didapat model terbaik adalah ARDL p=13 dan q=2 dengan nilai MAPE 0,7%
