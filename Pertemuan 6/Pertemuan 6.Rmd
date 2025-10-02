@@ -1,0 +1,241 @@
+---
+title: "Prak Pertemuan 6"
+author: "Muhammad Fadhil Hakim"
+date: "2025-09-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+# Import Data
+```{r}
+library(readxl)
+df <- read_excel("C:/prak/sem 5/MPDW/MPDW/Kurs Jual Rataan USD Fix.xlsx")
+df <- df[1:104,] #mengambil baris ke 1-104 dari data
+df
+```
+
+### Plot *Time Series*
+
+```{r}
+df_ts <- as_tsibble(df, index = `Minggu Ke-`)
+
+library(ggplot2)
+
+plot_df <- df_ts |> 
+  ggplot(aes(x = `Minggu Ke-`, y = `Kurs Jual Rataan`)) + 
+  geom_line() + 
+  theme_bw() +
+  xlab("Obs") + 
+  ylab("Nilai")
+
+plot_df
+
+
+mean(df$`Kurs Jual Rataan`)
+```
+
+Berdasarkan plot, data tidak terlihat stasioner dalam rataan karena terdapat tren naik pada data. 
+
+### Plot Density
+
+```{r}
+lattice::densityplot(as.vector(df_ts$`Kurs Jual Rataan`), 
+                     main = "Density Plot Kurs Jual Rataan USD Fix", 
+                     xlab = "Kurs Jual Rataan")
+```
+
+Berdasarkan plot density, data tidak terlihat stasioner dalam varian karena bentuk kurva tidak menyerupai kurva normal.
+
+### Plot ACF
+
+```{r}
+acf(df_ts)
+```
+
+### Uji ADF
+
+```{r}
+tseries::adf.test(df_ts$`Kurs Jual Rataan`, k = 0)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.53 yang lebih besar dari taraf nyata 5% sehingga gagal tolak $H_0$ dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1:104)
+bc = boxcox(df_ts$`Kurs Jual Rataan`~index, lambda = seq(-13,4,by=1))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Plot box-cox menandakan nilai 1 tidak termasuk pada range rounded value optimum sehingga data tidak stasioner dalam ragam
+
+## Partisi Data (80:20)
+
+### Train Data
+
+```{r}
+train_size = floor(0.8 * length(df_ts$`Kurs Jual Rataan`))
+train_data = df_ts$`Kurs Jual Rataan`[1:train_size]
+print(train_data)
+mean(train_data)
+var(train_data)
+```
+
+#### Plot Time Series
+
+```{r}
+plot.ts(train_data, main = "Train Data Kurs Jual Rataan", ylab = "Harga (USD)", xlab = "Minggu", col = "blue")
+```
+
+Berdasarkan plot, data train tidak terlihat stasioner dalam rataan karena terdapat tren naik pada data.
+
+#### Plot ACF
+
+```{r}
+acf(train_data)
+```
+
+Berdasarkan plot ACF, data train tidak terlihat stasioner dalam rataan karena terdapat nilai ACF yang melewati batas signifikan.
+
+#### Uji ADF
+
+```{r}
+adf.test(train_data)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat semua *p-value* lebih besar dari taraf nyata 5% sehingga gagal tolak $H_0$ dan menandakan bahwa data train tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+#### Plot Box-Cox
+
+```{r}
+idx = seq(1:length(train_data))
+bx = boxcox(train_data~idx, lambda = seq(-15,4,by=1))
+#Nilai Rounded Lambda
+lambda = bx$x[which.max(bx$y)]
+lambda
+#SK
+bx$x[bx$y > max(bx$y) - 1/2 * qchisq(.95,1)]
+```
+
+Plot box-cox menandakan nilai 1 tidak termasuk pada range rounded value optimum sehingga data train tidak stasioner dalam ragam
+
+### Test Data
+```{r}
+test_data = df_ts$`Kurs Jual Rataan`[(train_size + 1):length(df_ts$`Kurs Jual Rataan`)]
+print(test_data)
+mean(test_data)
+var(test_data)
+```
+
+#### Plot Time Series
+
+```{r}
+plot.ts(test_data, main = "Test Data Kurs Jual Rataan", ylab = "Harga (USD)", xlab = "Minggu", col = "blue")
+```
+
+Berdasarkan plot, data test tidak terlihat stasioner dalam rataan karena terdapat tren naik pada data.
+
+#### Plot ACF
+
+```{r}
+acf(test_data)
+```
+
+Berdasarkan plot ACF, data test tidak terlihat stasioner dalam rataan karena menunjukkan pola tails off dan tidak langsung cut off.
+
+#### Uji ADF
+
+```{r}
+adf.test(test_data)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat semua *p-value* lebih besar dari taraf nyata 5% sehingga gagal tolak $H_0$ dan menandakan bahwa data test tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+#### Plot Box-Cox
+
+```{r}
+idy = seq((train_size + 1):length(df_ts$`Kurs Jual Rataan`))
+by = boxcox(test_data~idy, lambda = seq(-40,40,by=1))
+#Nilai Rounded Lambda
+lambda = by$x[which.max(by$y)]
+lambda
+#SK
+by$x[by$y > max(by$y) - 1/2 * qchisq(.95,1)]
+```
+
+Plot box-cox menandakan nilai 1 termasuk pada range rounded value optimum sehingga data test stasioner dalam ragam
+
+## Penanganan
+
+### Transformasi data
+#### Transformasi log (λ = 0) karena lambda optimum terlalu besar nilainya (λ =-7.68)
+
+```{r}
+library(forecast)
+df_ts_log <- log(df_ts$`Kurs Jual Rataan`)
+
+par(mfrow=c(1,2))
+plot(df_ts$`Kurs Jual Rataan`, main="Original", type="l")
+plot(df_ts_log, main="Log Transform", type="l")
+```
+
+karena nilai lambda optimum terlalu besar, menyebabkan hasil transformasi menjadi tidak wajar. Oleh karena itu, digunakan lambda = 0 (log transform) untuk mentransformasi data. Hasil transformasi secara visual membuat data sedikit lebih stasioner dalam ragam
+
+#### Plot Box-Cox Setelah Transformasi
+
+```{r}
+b = boxcox(df_ts_log~index, lambda = seq(-200,200,by=20))
+```
+
+Plot box-cox menandakan nilai 1 tidak termasuk pada range rounded value optimum sehingga data log transform tidak stasioner dalam ragam. Ketidakstasioneran dalam ragam tidak dapat diatasi.
+
+### Diferensiasi
+
+```{r}
+df_ts_diff1 = diff(df_ts_log, differences = 1)
+
+plot(df_ts_diff1, main = "First Differencing after Log Transform", 
+     ylab = "Δ Harga", col = "red")
+```
+
+#### Plot ACF Setelah Diferensiasi
+
+```{r}
+acf(df_ts_diff1, main = "ACF setelah First Differencing")
+```
+
+Berdasarkan plot ACF, data terlihat stasioner dalam rataan karena langsung cut off.
+
+#### Uji ADF Setelah Diferensiasi
+
+```{r}
+adf.test(df_ts_diff1)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* = 0.01 sehingga lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data setelah differencing stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot ACF.
